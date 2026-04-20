@@ -1,0 +1,64 @@
+{
+  "config": {
+    "store_url": "https://www.jumbo.com.ar",
+    "max_search_results_to_consider": 5,
+    "add_to_cart_retry_attempts": 2,
+    "fuzzy_match_threshold": 60
+  },
+  "items": [
+    {
+      "id": "item-001",
+      "name": "Leche La Serenísima Entera 1L",
+      "quantity": 4,
+      "category": "Lácteos",
+      "notes": "Preferir La Serenísima entera 1L. Evitar descremada.",
+      "enabled": true,
+      "fallback_search": "Leche entera 1L"
+    },
+    {
+      "id": "item-002",
+      "name": "Pan lactal Bimbo blanco 500g",
+      "quantity": 2,
+      "category": "Panadería",
+      "notes": "Cualquier marca de pan lactal blanco sirve si no hay Bimbo.",
+      "enabled": true,
+      "fallback_search": "Pan lactal blanco"
+    },
+    {
+      "id": "item-003",
+      "name": "Yogur Danone firme frutilla 190g",
+      "quantity": 6,
+      "category": "Lácteos",
+      "notes": null,
+      "enabled": true,
+      "fallback_search": "Yogur firme frutilla"
+    },
+    {
+      "id": "item-004",
+      "name": "Aceite de girasol Cocinero 1.5L",
+      "quantity": 1,
+      "category": "Almacén",
+      "notes": null,
+      "enabled": true,
+      "fallback_search": "Aceite girasol 1.5L"
+    },
+    {
+      "id": "item-005",
+      "name": "Arroz largo fino Gallo de Oro 1kg",
+      "quantity": 2,
+      "category": "Almacén",
+      "notes": null,
+      "enabled": true,
+      "fallback_search": "Arroz largo fino 1kg"
+    },
+    {
+      "id": "item-006",
+      "name": "Detergente Magistral original 750ml",
+      "quantity": 1,
+      "category": "Limpieza",
+      "notes": "Ejemplo de item desactivado — habilitar cuando sea necesario.",
+      "enabled": false,
+      "fallback_search": "Detergente líquido vajilla"
+    }
+  ]
+}
