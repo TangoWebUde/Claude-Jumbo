@@ -68,7 +68,21 @@ SELECTORS = {
     "captcha_frame": "iframe[src*='recaptcha'], iframe[src*='captcha']",
     "address_modal": "[class*='addressModal'], [class*='location-modal']",
     "address_modal_close": "[class*='addressModal'] button[class*='close'], [class*='location-modal'] button",
+    "cart_item_row": (
+        "[class*='CartItem'], [class*='cartItem'], "
+        "[class*='cart-item'], [class*='minicartItem']"
+    ),
+    "cart_item_name": (
+        "[class*='productName'], [class*='ProductName'], "
+        "[class*='nameContainer'], span[class*='name']"
+    ),
+    "cart_item_qty": (
+        "input[class*='Quantity'], input[class*='quantity'], "
+        "[class*='quantityInput'], [class*='quantity-input']"
+    ),
 }
+
+PRESETS_DIR = Path("presets")
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -123,7 +137,7 @@ class RunReport:
 class JumboBot:
     BASE_URL = "https://www.jumbo.com.ar"
 
-    def __init__(self, items_path: str, headless: bool = True, no_cache: bool = False):
+    def __init__(self, items_path: str | None = None, headless: bool = True, no_cache: bool = False):
         load_dotenv()
         self.email = os.getenv("JUMBO_EMAIL")
         self.password = os.getenv("JUMBO_PASSWORD")
@@ -134,8 +148,12 @@ class JumboBot:
                 exit_code=1,
             )
 
-        self.items_path = Path(items_path)
-        self.config, self.items = self._load_items()
+        if items_path:
+            self.items_path = Path(items_path)
+            self.config, self.items = self._load_items()
+        else:
+            self.items_path = None
+            self.config, self.items = {}, []
         self.store_url = self.config.get("store_url", self.BASE_URL)
         self.max_results = self.config.get("max_search_results_to_consider", 5)
         self.retry_attempts = self.config.get("add_to_cart_retry_attempts", 2)
@@ -289,6 +307,51 @@ class JumboBot:
                 self._human_delay(500, 1000)
         except Exception:
             pass
+
+    # ------------------------------------------------------------------
+    # Read current cart
+    # ------------------------------------------------------------------
+
+    def read_cart(self) -> list[dict]:
+        """Navigate to the cart page and return the items currently in it."""
+        cart_url = f"{self.store_url}/checkout/#/cart"
+        print(f"[carrito] Leyendo carrito en {cart_url} ...")
+        self.page.goto(cart_url, wait_until="domcontentloaded")
+        self._human_delay(2000, 3500)
+        self._dismiss_address_modal()
+        items = self._items_from_cart()
+        print(f"[carrito] {len(items)} producto(s) encontrado(s).")
+        return items
+
+    def _items_from_cart(self) -> list[dict]:
+        rows = self.page.locator(SELECTORS["cart_item_row"])
+        count = rows.count()
+        items = []
+        for i in range(count):
+            row = rows.nth(i)
+            try:
+                name = row.locator(SELECTORS["cart_item_name"]).first.inner_text(timeout=2000).strip()
+            except Exception:
+                name = f"Producto #{i + 1}"
+
+            qty = 1
+            try:
+                qty_el = row.locator(SELECTORS["cart_item_qty"]).first
+                qty_val = qty_el.input_value(timeout=1000).strip()
+                qty = int(qty_val) if qty_val.isdigit() else 1
+            except Exception:
+                pass
+
+            items.append({
+                "id": f"item-{i + 1:03d}",
+                "name": name,
+                "quantity": qty,
+                "category": "",
+                "notes": None,
+                "enabled": True,
+                "fallback_search": None,
+            })
+        return items
 
     # ------------------------------------------------------------------
     # Search & add to cart
@@ -516,6 +579,45 @@ class JumboBot:
 
 
 # ---------------------------------------------------------------------------
+# Presets
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CONFIG = {
+    "store_url": "https://www.jumbo.com.ar",
+    "max_search_results_to_consider": 5,
+    "add_to_cart_retry_attempts": 2,
+    "fuzzy_match_threshold": 60,
+}
+
+
+def save_preset(name: str, items: list[dict], config: dict | None = None) -> Path:
+    PRESETS_DIR.mkdir(exist_ok=True)
+    preset_path = PRESETS_DIR / f"{name}.json"
+    data = {"config": config or _DEFAULT_CONFIG, "items": items}
+    preset_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return preset_path
+
+
+def load_preset(name: str) -> tuple[dict, list]:
+    preset_path = PRESETS_DIR / f"{name}.json"
+    if not preset_path.exists():
+        available = list_presets()
+        hint = f"Disponibles: {', '.join(available)}" if available else "No hay presets guardados aún."
+        _die(f"Preset '{name}' no encontrado. {hint}")
+    try:
+        data = json.loads(preset_path.read_text(encoding="utf-8"))
+        return data.get("config", {}), data.get("items", [])
+    except json.JSONDecodeError as e:
+        _die(f"Error leyendo preset '{name}': {e}")
+
+
+def list_presets() -> list[str]:
+    if not PRESETS_DIR.exists():
+        return []
+    return [p.stem for p in sorted(PRESETS_DIR.glob("*.json"))]
+
+
+# ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
 
@@ -549,23 +651,35 @@ def _unique(lst: list) -> list:
 def main():
     parser = argparse.ArgumentParser(description="Jumbo.com.ar cart automation bot")
     parser.add_argument("--visible", action="store_true", help="Mostrar ventana del navegador")
-    parser.add_argument("--headless", action="store_true", default=True, help="Modo headless (default)")
     parser.add_argument("--dry-run", action="store_true", help="Validar JSON y mostrar items sin abrir browser")
     parser.add_argument("--no-cache", action="store_true", help="Ignorar cookies guardadas, forzar login")
     parser.add_argument("--items", default="cart_items.json", help="Ruta al archivo de items (default: cart_items.json)")
+    parser.add_argument("--save-preset", metavar="NOMBRE", help="Leer el carrito actual de Jumbo y guardarlo como preset")
+    parser.add_argument("--load-preset", metavar="NOMBRE", help="Usar un preset guardado en lugar de --items")
+    parser.add_argument("--list-presets", action="store_true", help="Listar los presets disponibles")
     args = parser.parse_args()
 
     headless = not args.visible
 
-    if args.dry_run:
-        _dry_run(args.items)
+    if args.list_presets:
+        _cmd_list_presets()
         return
 
-    bot = JumboBot(items_path=args.items, headless=headless, no_cache=args.no_cache)
+    if args.dry_run:
+        items_path = _resolve_items_path(args)
+        _dry_run(items_path)
+        return
+
+    if args.save_preset:
+        _cmd_save_preset(args.save_preset, headless=headless, no_cache=args.no_cache)
+        return
+
+    items_path = _resolve_items_path(args)
+    bot = JumboBot(items_path=items_path, headless=headless, no_cache=args.no_cache)
     try:
         bot.start()
         bot.ensure_logged_in()
-        report = bot.run()
+        bot.run()
     except SystemExit:
         raise
     except Exception:
@@ -576,6 +690,61 @@ def main():
         bot.close()
 
     sys.exit(0)
+
+
+def _resolve_items_path(args) -> str:
+    if args.load_preset:
+        preset_path = PRESETS_DIR / f"{args.load_preset}.json"
+        if not preset_path.exists():
+            available = list_presets()
+            hint = f"Disponibles: {', '.join(available)}" if available else "No hay presets guardados aún."
+            _die(f"Preset '{args.load_preset}' no encontrado. {hint}")
+        print(f"[preset] Usando preset '{args.load_preset}'.")
+        return str(preset_path)
+    return args.items
+
+
+def _cmd_list_presets():
+    presets = list_presets()
+    if not presets:
+        print("No hay presets guardados. Usá --save-preset NOMBRE para crear uno.")
+        return
+    print(f"Presets disponibles ({len(presets)}):")
+    for name in presets:
+        preset_path = PRESETS_DIR / f"{name}.json"
+        try:
+            data = json.loads(preset_path.read_text(encoding="utf-8"))
+            items = data.get("items", [])
+            enabled = sum(1 for it in items if it.get("enabled", True))
+            print(f"  {name}  ({enabled} item(s))")
+        except Exception:
+            print(f"  {name}  (error al leer)")
+
+
+def _cmd_save_preset(name: str, headless: bool, no_cache: bool):
+    bot = JumboBot(headless=headless, no_cache=no_cache)
+    try:
+        bot.start()
+        bot.ensure_logged_in()
+        items = bot.read_cart()
+    except SystemExit:
+        raise
+    except Exception:
+        print("\n[ERROR INESPERADO]", file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(3)
+    finally:
+        bot.close()
+
+    if not items:
+        print("[preset] El carrito está vacío. Agregá productos en Jumbo antes de guardar.")
+        sys.exit(1)
+
+    preset_path = save_preset(name, items)
+    print(f"[preset] Guardado como '{name}' en {preset_path} ({len(items)} item(s)).")
+    print("\nProductos guardados:")
+    for it in items:
+        print(f"  [{it['id']}] {it['name']}  x{it['quantity']}")
 
 
 def _dry_run(items_path: str):

@@ -147,11 +147,49 @@ cart_items.json
 ## Comandos disponibles
 
 ```bash
-python bot.py               # Ejecutar (sin ventana del navegador)
-python bot.py --visible     # Mostrar el navegador mientras trabaja
-python bot.py --dry-run     # Solo mostrar la lista, sin abrir el browser
-python bot.py --no-cache    # Forzar login nuevo (ignorar sesión guardada)
+python bot.py                          # Ejecutar con cart_items.json
+python bot.py --visible                # Mostrar el navegador mientras trabaja
+python bot.py --dry-run                # Solo mostrar la lista, sin abrir el browser
+python bot.py --no-cache               # Forzar login nuevo (ignorar sesión guardada)
+
+# Presets
+python bot.py --save-preset semanal    # Leer el carrito actual y guardarlo como "semanal"
+python bot.py --load-preset semanal    # Armar el carrito usando el preset "semanal"
+python bot.py --list-presets           # Ver todos los presets guardados
 ```
+
+---
+
+## Presets
+
+Los presets te permiten guardar distintas listas de compras con nombre y reutilizarlas cuando quieras. Se guardan en la carpeta `presets/` como archivos JSON.
+
+### Guardar el carrito actual como preset
+
+Armá el carrito en [jumbo.com.ar](https://www.jumbo.com.ar) manualmente, y luego ejecutá:
+
+```bash
+python bot.py --save-preset semanal
+```
+
+El bot lee los productos de tu carrito y los guarda en `presets/semanal.json`. Podés tener todos los presets que quieras con distintos nombres: `semanal`, `mensual`, `cumple`, etc.
+
+### Usar un preset
+
+```bash
+python bot.py --load-preset semanal
+```
+
+### Ver qué presets tenés guardados
+
+```bash
+python bot.py --list-presets
+# Presets disponibles (2):
+#   mensual   (5 items)
+#   semanal   (12 items)
+```
+
+Los presets se pueden editar a mano o pedirle a Claude que los modifique igual que con `cart_items.json`.
 
 ---
 
